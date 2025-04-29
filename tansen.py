@@ -1,10 +1,10 @@
 # --- Imports ---
 import discord
 import json
-#import os
+import os
 import tokens
 from tokens import dctokenn
-#dctoken = os.getenv("dctoken")
+dctoken = os.getenv("dctoken")
 from discord.ext import commands
 from discord import FFmpegPCMAudio
 from discord import app_commands
@@ -503,4 +503,4 @@ async def help(interaction: discord.Interaction):
 
 # --- Run the Bot ---
 keep_alive()
-client.run(dctokenn)
+client.run(dctoken)
