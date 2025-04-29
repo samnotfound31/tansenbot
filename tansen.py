@@ -1,8 +1,8 @@
 # --- Imports ---
 import discord
 import json
-import tokens
-from tokens import dctokenn
+import os
+dctoken = os.getenv(dctoken)
 from discord.ext import commands
 from discord import FFmpegPCMAudio
 from discord import app_commands
@@ -499,4 +499,4 @@ async def help(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=HelpMenu())
 
 # --- Run the Bot ---
-client.run(dctokenn)
+client.run(dctoken)
