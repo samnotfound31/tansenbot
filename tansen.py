@@ -1,14 +1,17 @@
 # --- Imports ---
 import discord
 import json
-import os
-dctoken = os.getenv("dctoken")
+#import os
+import tokens
+from tokens import dctokenn
+#dctoken = os.getenv("dctoken")
 from discord.ext import commands
 from discord import FFmpegPCMAudio
 from discord import app_commands
 import yt_dlp
 import asyncio
 import requests
+from keep_alive import keep_alive
 
 # --- Setup ---
 intents = discord.Intents.default()
@@ -499,4 +502,5 @@ async def help(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=HelpMenu())
 
 # --- Run the Bot ---
-client.run(dctoken)
+keep_alive()
+client.run(dctokenn)
