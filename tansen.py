@@ -2,7 +2,7 @@
 import discord
 import json
 import os
-dctoken = os.getenv(dctoken)
+dctoken = os.getenv("dctoken")
 from discord.ext import commands
 from discord import FFmpegPCMAudio
 from discord import app_commands
