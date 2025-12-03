@@ -28,3 +28,4 @@ typing_extensions>=4.5.0
 
 # NOTE: ffmpeg is a system dependency and NOT installed via pip.
 # Make sure ffmpeg is available on the host (Railway/Nixpacks/Oracle/your machine).
+PyNaCl==1.5.0
