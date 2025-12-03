@@ -1,2 +1,8 @@
 [build]
-nixpacks = { pkgs = ["ffmpeg"] }
+builder = "NIXPACKS"
+
+[nixpacks]
+packages = ["ffmpeg"]
+
+[start]
+cmd = "python3 tansenmain.py"
