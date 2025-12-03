@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+env/
+venv/
+venv.bak/
+ENV/
+.Python
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# env / secrets
+.env
+*.env
+.env.*
+secrets.json
+
+# DB, downloads, cache
+data/
+*.db
+*.sqlite3
+downloads/
+downloads/*
+cookies*
+*.cookie
+*.log
+
+# build / distribution
+dist/
+build/
+*.egg-info/
+
+# compiled
+*.pyc
