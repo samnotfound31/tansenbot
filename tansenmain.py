@@ -897,10 +897,27 @@ async def spotify_track_to_song_dict(track: Dict[str, Any], requester: str, guil
 @bot.event
 async def on_ready():
     logger.info("Bot ready. Logged in as %s (%s)", bot.user, bot.user.id)
+
+    # Sync slash commands
     try:
         await bot.tree.sync()
+        logger.info("Synced application commands.")
     except Exception:
         logger.exception("Failed to sync tree")
+
+    # Set presence
+    try:
+        await bot.change_presence(
+            status=discord.Status.online,
+            activity=discord.Activity(
+                type=discord.ActivityType.playing,
+                name="with raags"
+            )
+        )
+        logger.info("Bot presence set: Playing with raags")
+    except Exception:
+        logger.exception("Failed to set bot presence")
+
 
 @tree.command(name="join", description="Make the bot join your voice channel")
 async def join(interaction: discord.Interaction):
@@ -1350,7 +1367,7 @@ async def spotify_playlists_cmd(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     token = get_spotify_token(str(interaction.user.id))
     if not token:
-        await interaction.followup.send("You need to link your Spotify account first. Use the OAuth URL from the bot owner or /spotify_callback.", ephemeral=True)
+        await interaction.followup.send("You need to link your Spotify account first. Use the OAuth URL from the bot owner or /spotify_link.", ephemeral=True)
         return
     out = []
     url = "https://api.spotify.com/v1/me/playlists"
@@ -1375,69 +1392,256 @@ async def spotify_playlists_cmd(interaction: discord.Interaction):
     await interaction.followup.send("Your playlists:\n" + "\n".join(lines), ephemeral=True)
 
 # Assist/help command with multi-page view
-@tree.command(name="assist", description="Show help for using Tansen bot.")
+# --- /assist interactive help panel -------------------------
+import discord
+from discord import app_commands
+from discord.ui import View, Select, Button
+from typing import Dict, Any, List
+
+# A structured help database for the assist command.
+# Add or edit entries to reflect your bot's current commands.
+ASSIST_DB: Dict[str, Dict[str, Any]] = {
+    "Playback": {
+        "summary": "Play music from YouTube/Spotify queries, manage queue and playback.",
+        "commands": {
+            "/play <query|url>": "Queue and play a track. Query can be a YouTube URL, search terms, or a Spotify link.",
+            "/playsp <spotify uri/url>": "Search Spotify and pick a track — then the bot will find a playable stream (YouTube fallback).",
+            "/playpl <playlist id|url>": "Queue an entire Spotify playlist (will convert tracks to playable items).",
+            "/queue": "Show the current queue for this guild.",
+            "/skip": "Skip the current track.",
+            "/pause": "Pause playback.",
+            "/resume": "Resume playback after pause.",
+            "/stop": "Stop playback and clear the queue.",
+            "/nowplaying": "Show the currently playing track (with requester and progress).",
+            "/volume <0.0-2.0>": "Set playback volume (0.0 silent — 1.0 default — 2.0 max).",
+        },
+        "usage": [
+            "Example: `/play bohemian rhapsody`",
+            "Example: `/play https://youtu.be/VIDEOID`",
+            "Example: `/playpl https://open.spotify.com/playlist/...`",
+        ],
+    },
+    "Spotify Integration": {
+        "summary": "Link Spotify account, use app token search, and queue Spotify tracks/playlists.",
+        "commands": {
+            "/spotify_link": "Start an OAuth flow to link your Spotify account (paste redirect URL into modal).",
+            "Spotify search UI": "Type a query and select results from the dropdown. The selected track is queued and played.",
+        },
+        "usage": [
+            "Run `/spotify_link` — open the OAuth link, authorize, then paste redirect URL in the modal.",
+            "Search: `/playsp <song or artist>` and use the select menu to pick a result.",
+        ],
+    },
+    "Lyrics": {
+        "summary": "Fetch lyrics from multiple providers (OVH first, Genius fallback).",
+        "commands": {
+            "/lyrics <title|auto>": "Fetch and post lyrics for the current or provided track. Auto attempts to detect current song.",
+        },
+        "usage": [
+            "Example: `/lyrics` (gets lyrics for the now playing song)",
+            "Example: `/lyrics All The Stars - Kendrick Lamar`",
+        ],
+    },
+    "Queue & Playlists": {
+        "summary": "Save and load user playlists, and persistent queue per guild.",
+        "commands": {
+            "/savepl <name>": "Save current queue as a playlist under your account.",
+            "/loadpl <name>": "Load a saved playlist into the queue.",
+            "/playpl <playlist id|url>": "Queue an entire Spotify playlist (see Playback above).",
+        },
+        "usage": [
+            "Example: `/savepl chill-vibes`",
+            "Example: `/loadpl chill-vibes`",
+        ],
+    },
+    "Moderation / Logs": {
+        "summary": "Moderation logging utilities and lookup (if enabled).",
+        "commands": {
+            "/modlogs set <channel>": "Set the modlog channel for the guild.",
+            "/modlogs <user>": "Show a user's moderation history (paginated).",
+            "/removewarnings <user>": "Remove warnings via dropdown selection.",
+            "/clearlogs <user>": "Delete a user's stored moderation logs.",
+        },
+        "usage": [
+            "Example: `/modlogs set #mod-log`",
+            "Example: `/modlogs @offending_user`",
+        ],
+    },
+    "Utilities": {
+        "summary": "Misc helpful utilities and bot maintenance commands.",
+        "commands": {
+            "/ping": "Bot latency / health check.",
+            "/assist": "Open this interactive help panel.",
+            "/keepalive": "Internal keepalive endpoint (for hosting or pingers).",
+            "/help (legacy)": "Text help (non-interactive).",
+        },
+        "usage": [
+            "Example: `/ping`",
+            "Use `/assist` for the full interactive guide.",
+        ],
+    },
+    "Settings & Admin": {
+        "summary": "Guild-specific settings stored persistently (volume, looping, modlog channel).",
+        "commands": {
+            "/set_volume <0.0-2.0>": "Set default guild playback volume.",
+            "/antiraidmode": "Toggle anti-raid protections (admins only).",
+            "/ipban <ip>": "Ban an IP (alt-detection) — admin-only and logs to DB.",
+        },
+        "usage": [
+            "Only admins may change guild-level settings.",
+        ],
+    },
+}
+
+
+def _build_summary_embed(user: discord.User) -> discord.Embed:
+    e = discord.Embed(
+        title="Tansen — Assistant & Command Reference",
+        description="Interactive command guide. Use the dropdown to pick a category or a specific command. "
+                    "Buttons let you quickly view all commands, usage examples, or close this panel.",
+        color=discord.Color.blurple()
+    )
+    e.add_field(name="Quick facts", value=(
+        "• Playback: YouTube & Spotify → YouTube fallback\n"
+        "• Lyrics: OVH first, Genius fallback\n"
+        "• Persistent queues & playlists (SQLite)\n"
+        "• Spotify OAuth linking supported (no public server required)\n"
+    ), inline=False)
+    e.set_footer(text=f"Requested by {user}", icon_url=getattr(user, "display_avatar", None))
+    return e
+
+
+class AssistSelect(Select):
+    def __init__(self):
+        options = []
+        # top-level option to show everything
+        options.append(discord.SelectOption(label="All command categories", description="Show the full list of categories and commands.", value="__all__"))
+        # add each category
+        for key, val in ASSIST_DB.items():
+            # description trimmed to 100 chars
+            desc = val.get("summary", "")[:100]
+            options.append(discord.SelectOption(label=key, description=desc or "Category", value=key))
+        super().__init__(placeholder="Choose a category to view details…", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            choice = self.values[0]
+            if choice == "__all__":
+                # build a combined embed summarising all categories
+                emb = discord.Embed(title="All Command Categories — Summary", color=discord.Color.green())
+                for k, v in ASSIST_DB.items():
+                    short = v.get("summary", "")
+                    emb.add_field(name=k, value=short, inline=False)
+                await interaction.response.edit_message(embed=emb, view=self.view)
+                return
+
+            data = ASSIST_DB.get(choice)
+            if not data:
+                await interaction.response.send_message("Unknown category.", ephemeral=True)
+                return
+
+            emb = discord.Embed(title=f"{choice} — Details", color=discord.Color.blurple())
+            emb.description = data.get("summary", "")
+            cmds = data.get("commands", {})
+            # show each command and its short description (as fields)
+            for cmd_sig, cmd_desc in cmds.items():
+                # embed field names have limits; ensure they are short
+                emb.add_field(name=cmd_sig[:256], value=cmd_desc[:1024], inline=False)
+
+            # usage examples
+            usage = data.get("usage", [])
+            if usage:
+                emb.add_field(name="Usage examples", value="\n".join(usage), inline=False)
+
+            await interaction.response.edit_message(embed=emb, view=self.view)
+        except Exception:
+            # graceful fallback
+            await interaction.response.send_message("An error occurred while fetching help.", ephemeral=True)
+
+
+class AssistView(View):
+    def __init__(self, *, timeout: float = 300.0):
+        super().__init__(timeout=timeout)
+        self.add_item(AssistSelect())
+
+        # Show all commands button
+        self.add_item(Button(label="Show All Commands", style=discord.ButtonStyle.secondary, custom_id="assist_all"))
+        # Usage examples button
+        self.add_item(Button(label="Usage Examples", style=discord.ButtonStyle.primary, custom_id="assist_usage"))
+        # Close button
+        self.add_item(Button(label="Close", style=discord.ButtonStyle.danger, custom_id="assist_close"))
+
+    @discord.ui.button(label="Open Docs", style=discord.ButtonStyle.link, url="https://example.org/docs", row=0)
+    async def docs_button(self, interaction: discord.Interaction, button: Button):
+        # link button included for convenience — replace URL with your docs if you have one
+        # This handler won't be called for link buttons, but kept as a reference.
+        pass
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # only allow the user who invoked to interact (the message will be ephemeral anyway)
+        return True
+
+    async def on_timeout(self):
+        # disable children when view times out
+        for item in self.children:
+            item.disabled = True
+
+    async def on_error(self, error: Exception, item, interaction: discord.Interaction):
+        try:
+            await interaction.response.send_message("An unexpected error occurred in the assistant UI.", ephemeral=True)
+        except Exception:
+            pass
+
+    # override to route non-select/button custom logic
+    async def _handle_button_press(self, interaction: discord.Interaction, custom_id: str):
+        # not used; kept for clarity if you want programmatic routing
+        pass
+
+    @discord.ui.button(label="Show All Commands", style=discord.ButtonStyle.secondary, custom_id="assist_all_btn", row=1)
+    async def _show_all_commands(self, interaction: discord.Interaction, button: Button):
+        emb = discord.Embed(title="Commands — Full Reference", color=discord.Color.green())
+        for cat, data in ASSIST_DB.items():
+            lines = []
+            for sig, desc in data.get("commands", {}).items():
+                lines.append(f"**{sig}** — {desc}")
+            emb.add_field(name=cat, value="\n".join(lines) or "No commands listed", inline=False)
+        await interaction.response.edit_message(embed=emb, view=self)
+
+    @discord.ui.button(label="Usage Examples", style=discord.ButtonStyle.primary, custom_id="assist_usage_btn", row=1)
+    async def _usage_examples(self, interaction: discord.Interaction, button: Button):
+        emb = discord.Embed(title="Usage Examples", color=discord.Color.blurple())
+        for cat, data in ASSIST_DB.items():
+            usage = data.get("usage", [])
+            if usage:
+                emb.add_field(name=cat, value="\n".join(usage), inline=False)
+        await interaction.response.edit_message(embed=emb, view=self)
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, custom_id="assist_close_btn", row=1)
+    async def _close(self, interaction: discord.Interaction, button: Button):
+        try:
+            await interaction.message.delete()
+            # If delete fails (permissions), disable view instead
+        except Exception:
+            for x in self.children:
+                x.disabled = True
+            await interaction.response.edit_message(content="(Assistant closed)", embed=None, view=self)
+
+
+# Register the slash command (uses `tree` app_commands tree — adjust if you named it differently)
+@tree.command(name="assist", description="Open an interactive assistant describing all features and commands.")
 async def assist_cmd(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
+    """
+    /assist - shows an interactive embed with buttons and dropdowns to learn about every feature.
+    """
+    # Build initial embed and view
+    embed = _build_summary_embed(interaction.user)
+    view = AssistView()
+    # send ephemeral so only the user sees it
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    pages = [
-        {
-            "title": "🎵 Playback Commands",
-            "description": (
-                "**/play <song name>** — Search on Spotify (app token), pick from dropdown, plays via YouTube.\n"
-                "**/playurl <YouTube or Spotify link>** — Play directly from a URL.\n"
-                "**/playpl <playlist ID>** — Queue an entire Spotify playlist.\n\n"
-                "**/skip**, **/stop**, **/loop**, **/queue**, **/remove <pos>**, **/clear**, **/nowplaying**"
-            )
-        },
-        {
-            "title": "🎧 Spotify Integration",
-            "description": (
-                "**/spotify_playlists** — List your Spotify playlists.\n"
-                "**/spotify_callback <url>** — Complete Spotify linking.\n"
-                "Tip: use /playpl with a playlist ID to queue whole playlists."
-            )
-        },
-        {
-            "title": "📜 Lyrics & Extras",
-            "description": (
-                "**/nowrics** — Show lyrics for the current song (OVH -> Genius fallback).\n"
-                "Now Playing panel supports buttons for playback control and lyrics."
-            )
-        }
-    ]
+# If you use a custom sync/register step at startup, ensure the command is synced:
+# await tree.sync()  # called elsewhere in your startup code
 
-    class HelpView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=180)
-            self.page = 0
-
-        @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary)
-        async def prev_page(self, interaction_btn: discord.Interaction, button: discord.ui.Button):
-            self.page = (self.page - 1) % len(pages)
-            await self.show_page(interaction_btn)
-
-        @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary)
-        async def next_page(self, interaction_btn: discord.Interaction, button: discord.ui.Button):
-            self.page = (self.page + 1) % len(pages)
-            await self.show_page(interaction_btn)
-
-        async def show_page(self, interaction_btn: discord.Interaction):
-            page = pages[self.page]
-            embed = discord.Embed(title=page["title"], description=page["description"], color=discord.Color.blurple())
-            embed.set_footer(text=f"Page {self.page+1}/{len(pages)} — Use ◀️ ▶️ to navigate")
-            try:
-                await interaction_btn.response.edit_message(embed=embed, view=self)
-            except Exception:
-                try:
-                    await interaction_btn.response.send_message(embed=embed, view=self, ephemeral=True)
-                except Exception:
-                    pass
-
-    view = HelpView()
-    first = pages[0]
-    embed = discord.Embed(title=first["title"], description=first["description"], color=discord.Color.blurple())
-    embed.set_footer(text=f"Page 1/{len(pages)} — Use ◀️ ▶️ to navigate")
-    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 # App command error handler
 @bot.tree.error
