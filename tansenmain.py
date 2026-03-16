@@ -371,6 +371,44 @@ def set_now_playing(guild_id: int, song: Optional[Dict[str, Any]]):
     except Exception:
         pass
 
+async def _resolve_via_invidious(query: str) -> Optional[str]:
+    """Search via public Invidious API → return a direct YouTube watch URL.
+
+    Invidious is an open-source YouTube frontend. Its search API doesn't require
+    sign-in cookies, making it perfect for cloud/datacenter deployments where
+    yt-dlp YouTube search returns 403/sign-in errors.
+    """
+    import urllib.request, urllib.parse, json as _json
+    # Multiple instances for redundancy — try each until one works
+    INSTANCES = [
+        "https://inv.nadeko.net",
+        "https://invidious.io.lol",
+        "https://invidious.privacyredirect.com",
+        "https://iv.datura.network",
+    ]
+    params = urllib.parse.urlencode({"q": query, "type": "video", "fields": "videoId", "page": "1"})
+
+    def _fetch():
+        for base in INSTANCES:
+            try:
+                req = urllib.request.Request(
+                    f"{base}/api/v1/search?{params}",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    data = _json.loads(resp.read())
+                    if isinstance(data, list) and data:
+                        vid_id = data[0].get("videoId")
+                        if vid_id:
+                            return f"https://www.youtube.com/watch?v={vid_id}"
+            except Exception:
+                continue
+        return None
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _fetch)
+
+
 # Create audio source helper (resolve a playable URL with yt-dlp if needed)
 # Replace or add this helper. It centralizes yt-dlp extraction + ffmpeg creation and retries.
 async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 3, volume: float = 1.0):
@@ -399,6 +437,8 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
                 "skip": ["dash", "hls"],
             }
         },
+        # Use Node.js for JS evaluation (YouTube bot-detection bypass via EJS)
+        "js_runtimes": "node",
     }
     # Inject YouTube cookies if available (critical for cloud/datacenter IPs)
     if YOUTUBE_COOKIES_FILE:
@@ -455,6 +495,8 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
     if isinstance(_artists, list):
         _artists = ", ".join(_artists)
     search_fallback = f"ytsearch1:{_title} {_artists}".strip() if _title else None
+    # Build a clean text query for Invidious fallback (title + artists)
+    _invidious_query = f"{_title} {_artists}".strip() if _title else None
 
     last_exc = None
     attempt = 0
@@ -513,6 +555,40 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
             last_exc = exc
             await asyncio.sleep(0.5 * attempt)
             continue
+
+    # ── Invidious fallback ────────────────────────────────────────────────────────
+    # yt-dlp search fails on datacenter IPs (Oracle, Railway etc.) because YouTube
+    # requires sign-in for search. Invidious is an open-source YouTube frontend whose
+    # search API is publicly accessible and not IP-gated.
+    # Once we get the video ID from Invidious, we use the direct YouTube watch URL
+    # which yt-dlp CAN extract (Android/VR client path, works without sign-in).
+    if _invidious_query:
+        logger.info("[audio] Trying Invidious fallback for: %s", _invidious_query[:80])
+        yt_url = await _resolve_via_invidious(_invidious_query)
+        if yt_url:
+            logger.info("[audio] Invidious resolved to: %s", yt_url)
+            info = await loop.run_in_executor(None, _extract, yt_url)
+            if info:
+                stream_url = None
+                if isinstance(info.get("formats"), list):
+                    for f in reversed(info["formats"]):
+                        if f.get("acodec") not in (None, "none") and f.get("vcodec") in (None, "none") and f.get("url"):
+                            stream_url = f["url"]
+                            break
+                    if not stream_url:
+                        for f in reversed(info["formats"]):
+                            if f.get("url"):
+                                stream_url = f["url"]
+                                break
+                if not stream_url:
+                    stream_url = info.get("url") or info.get("webpage_url")
+                if stream_url:
+                    logger.info("[audio] Invidious fallback succeeded for '%s'", song.get("title"))
+                    try:
+                        ff = discord.FFmpegPCMAudio(stream_url, before_options=before_options, options=options, executable=executable_path)
+                        return discord.PCMVolumeTransformer(ff, volume)
+                    except Exception:
+                        pass
 
     raise RuntimeError(f"Failed to build audio source for {query}: {last_exc}")
 
