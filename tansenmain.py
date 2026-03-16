@@ -443,8 +443,10 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
     import discord
 
     YDL_OPTS_LOCAL = {
-        # Prefer webm/opus — works best with FFmpeg reconnect streaming
-        "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
+        # Use bestaudio/best without format restrictions — let yt-dlp pick the best
+        # available format. The ANDROID_VR client (auto-selected by yt-dlp) works
+        # well on cloud IPs and has compatible audio formats.
+        "format": "bestaudio/best",
         "quiet": True,
         "no_warnings": True,
         # NOTE: do NOT set ignoreerrors=True here — it makes yt-dlp silently return
@@ -454,18 +456,12 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
         "extract_flat": False,
         "skip_download": True,
         "noprogress": True,
-        # Fake a real browser so YouTube CDN doesn't return 403
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # Use cloud-friendly clients
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["tv_embedded", "mweb", "web"],
-                "skip": ["dash", "hls"],
-            }
-        },
+        # Do NOT specify extractor_args/player_client here — yt-dlp auto-selects
+        # ANDROID_VR which works on Oracle/cloud IPs without format restrictions.
     }
     # Inject YouTube cookies if available (critical for cloud/datacenter IPs)
     if YOUTUBE_COOKIES_FILE:
