@@ -40,13 +40,8 @@ from urllib.parse import urlencode
 # delete_spotify_token(user_id)
 # save_token(key, value)
 # get_token(key)
-from database import (
-    save_spotify_token,
-    get_spotify_token_for_user,
-    delete_spotify_token,
-    save_token,
-    get_token,
-)
+import database as dibe
+from database import get_token, save_token, get_spotify_token_for_user, delete_spotify_token
 
 # env
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
@@ -132,7 +127,7 @@ def _save_user_token_db(user_id: str, access_token: str, refresh_token: Optional
     Returns True on success, False on failure.
     """
     try:
-        sig = inspect.signature(save_spotify_token)
+        sig = inspect.signature(dibe.save_spotify_token)
         params = len(sig.parameters)
     except Exception:
         # unknown signature; attempt 4-arg call and fallback
@@ -142,19 +137,19 @@ def _save_user_token_db(user_id: str, access_token: str, refresh_token: Optional
     try:
         if params is None or params >= 4:
             # common modern signature
-            save_spotify_token(str(user_id), access_token, refresh_token, expires_at)
+            dibe.save_spotify_token(str(user_id), access_token, refresh_token, expires_at)
             return True
     except TypeError:
         pass
     try:
         # 3-arg (user, access, refresh)
-        save_spotify_token(str(user_id), access_token, refresh_token)
+        dibe.save_spotify_token(str(user_id), access_token, refresh_token)
         return True
     except TypeError:
         pass
     try:
         # 2-arg (user, access)
-        save_spotify_token(str(user_id), access_token)
+        dibe.save_spotify_token(str(user_id), access_token)
         return True
     except Exception:
         return False

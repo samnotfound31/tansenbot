@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  tansen-bot:
+    build: .
+    image: tansen-bot:latest
+    container_name: tansen-bot
+
+    # ── Restart policy ──────────────────────────────────────────────────────
+    # "unless-stopped" = auto-restarts on crash/reboot, but not if YOU docker stop it
+    restart: unless-stopped
+
+    # ── Environment variables ───────────────────────────────────────────────
+    # Secrets are loaded from .env file — NEVER hard-code tokens here
+    env_file:
+      - .env
+
+    # ── Port mapping ────────────────────────────────────────────────────────
+    # keep_alive.py Flask server — useful for UptimeRobot pings on a VPS
+    ports:
+      - "8080:8080"
+
+    # ── Persistent volumes ──────────────────────────────────────────────────
+    # ./data on the HOST → /data in the container (SQLite DB survives restarts)
+    # ./downloads  → temp audio cache (optional, cleared on restart is fine)
+    volumes:
+      - ./data:/data
+      - ./downloads:/app/downloads
+
+    # ── Resource limits ─────────────────────────────────────────────────────
+    # Tansen uses FFmpeg + yt-dlp — give it enough RAM to stream smoothly.
+    # Adjust based on your VPS plan. (512 MB min recommended)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+    # ── Logging ────────────────────────────────────────────────────────────
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"     # rotate logs after 10 MB
+        max-file: "3"       # keep last 3 rotated logs

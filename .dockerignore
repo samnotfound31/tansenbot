@@ -1,0 +1,41 @@
+# ─── Docker ignore file ───────────────────────────────────────────────────────
+# Prevents secrets, local data, and dev artifacts from being baked into the image
+
+# Secrets — NEVER include these in the Docker image
+.env
+*.env
+.env.*
+secrets.json
+tokens.py
+secrets.py
+*.key
+*.pem
+cookies.txt
+
+# Local data (mounted as volumes at runtime instead)
+data/
+*.db
+*.sqlite3
+downloads/
+
+# Git history (not needed in container)
+.git/
+.gitignore
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Dev tools
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Cache
+.cache/
