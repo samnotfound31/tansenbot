@@ -443,9 +443,6 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
     import discord
 
     YDL_OPTS_LOCAL = {
-        # Use bestaudio/best without format restrictions — let yt-dlp pick the best
-        # available format. The ANDROID_VR client (auto-selected by yt-dlp) works
-        # well on cloud IPs and has compatible audio formats.
         "format": "bestaudio/best",
         "quiet": True,
         "no_warnings": True,
@@ -460,8 +457,10 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # Do NOT specify extractor_args/player_client here — yt-dlp auto-selects
-        # ANDROID_VR which works on Oracle/cloud IPs without format restrictions.
+        # Use Node.js to solve YouTube's JS challenges (required on cloud IPs)
+        # The EJS solver script is downloaded from GitHub on first use and cached.
+        "js_runtimes": {"node": {}},
+        "remote_components": "ejs:github",
     }
     # Inject YouTube cookies if available (critical for cloud/datacenter IPs)
     if YOUTUBE_COOKIES_FILE:
