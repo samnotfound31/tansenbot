@@ -392,14 +392,17 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # Bypass YouTube bot detection / PO token requirement (yt-dlp 2024+)
+        # Use cloud-friendly clients (same as global YDL_OPTS)
         "extractor_args": {
             "youtube": {
-                "player_client": ["web", "android"],
-                "skip": ["hls", "dash"],
+                "player_client": ["tv_embedded", "mweb", "web"],
+                "skip": ["dash", "hls"],
             }
         },
     }
+    # Inject YouTube cookies if available (critical for cloud/datacenter IPs)
+    if YOUTUBE_COOKIES_FILE:
+        YDL_OPTS_LOCAL["cookiefile"] = YOUTUBE_COOKIES_FILE
 
     # Reconnect flags are REQUIRED for YouTube CDN streams (prevents 403 after handshake)
     # NOTE: Do NOT add -user_agent here — single quotes crash FFmpeg on Windows.
