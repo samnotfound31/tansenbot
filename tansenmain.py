@@ -457,10 +457,17 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # Use Node.js to solve YouTube's JS challenges (required on cloud IPs)
-        # The EJS solver script is downloaded from GitHub on first use and cached.
+        # Use Node.js + EJS solver to decrypt YouTube JS challenges.
+        # Must use "tv" player client — EJS is needed for the tv client which works
+        # on cloud IPs. remote_components MUST be a set (not string) or yt-dlp
+        # iterates chars: {"ejs:github"} not "ejs:github".
         "js_runtimes": {"node": {}},
-        "remote_components": "ejs:github",
+        "remote_components": {"ejs:github"},
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["tv"],
+            }
+        },
     }
     # Inject YouTube cookies if available (critical for cloud/datacenter IPs)
     if YOUTUBE_COOKIES_FILE:
