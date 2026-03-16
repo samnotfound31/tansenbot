@@ -87,22 +87,32 @@ YDL_OPTS = {
     },
 }
 
-# Optional: load YouTube cookies from env var (base64-encoded cookies.txt)
-# Set YOUTUBE_COOKIES_B64 on Railway with the output of:
-#   base64 -w0 cookies.txt
+# YouTube cookies — two ways to provide them:
+# 1. YOUTUBE_COOKIES_FILE: direct path to a mounted cookies.txt (recommended for Docker)
+#    docker run ... -v ~/cookies.txt:/app/cookies.txt -e YOUTUBE_COOKIES_FILE=/app/cookies.txt
+# 2. YOUTUBE_COOKIES_B64: base64-encoded cookies.txt (good for Railway env vars)
 import base64 as _b64, tempfile as _tmp, os as _os
-_yt_cookies_b64 = _os.environ.get("YOUTUBE_COOKIES_B64", "")
 YOUTUBE_COOKIES_FILE: Optional[str] = None
-if _yt_cookies_b64:
-    try:
-        _cookie_bytes = _b64.b64decode(_yt_cookies_b64)
-        _cookie_file = _tmp.NamedTemporaryFile(delete=False, suffix=".txt", mode="wb")
-        _cookie_file.write(_cookie_bytes)
-        _cookie_file.close()
-        YOUTUBE_COOKIES_FILE = _cookie_file.name
-        YDL_OPTS["cookiefile"] = YOUTUBE_COOKIES_FILE
-    except Exception:
-        pass
+
+# Method 1: direct file path (Docker volume mount)
+_yt_cookies_path = _os.environ.get("YOUTUBE_COOKIES_FILE", "")
+if _yt_cookies_path and _os.path.isfile(_yt_cookies_path):
+    YOUTUBE_COOKIES_FILE = _yt_cookies_path
+    YDL_OPTS["cookiefile"] = YOUTUBE_COOKIES_FILE
+
+# Method 2: base64-encoded string (Railway / env var)
+if not YOUTUBE_COOKIES_FILE:
+    _yt_cookies_b64 = _os.environ.get("YOUTUBE_COOKIES_B64", "")
+    if _yt_cookies_b64:
+        try:
+            _cookie_bytes = _b64.b64decode(_yt_cookies_b64)
+            _cookie_file = _tmp.NamedTemporaryFile(delete=False, suffix=".txt", mode="wb")
+            _cookie_file.write(_cookie_bytes)
+            _cookie_file.close()
+            YOUTUBE_COOKIES_FILE = _cookie_file.name
+            YDL_OPTS["cookiefile"] = YOUTUBE_COOKIES_FILE
+        except Exception:
+            pass
 
 
 FFMPEG_BEFORE = (
