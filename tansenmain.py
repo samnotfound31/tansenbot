@@ -372,23 +372,50 @@ def set_now_playing(guild_id: int, song: Optional[Dict[str, Any]]):
         pass
 
 async def _resolve_via_invidious(query: str) -> Optional[str]:
-    """Search via public Invidious API → return a direct YouTube watch URL.
+    """Search for a YouTube video → return a direct watch URL.
 
-    Invidious is an open-source YouTube frontend. Its search API doesn't require
-    sign-in cookies, making it perfect for cloud/datacenter deployments where
-    yt-dlp YouTube search returns 403/sign-in errors.
+    Priority:
+    1. YouTube Data API v3 (YOUTUBE_API_KEY env var) — official, no IP restrictions
+    2. Public Invidious instances — open-source frontend, may be unreliable
     """
-    import urllib.request, urllib.parse, json as _json
-    # Multiple instances for redundancy — try each until one works
-    INSTANCES = [
-        "https://inv.nadeko.net",
-        "https://invidious.io.lol",
-        "https://invidious.privacyredirect.com",
-        "https://iv.datura.network",
-    ]
-    params = urllib.parse.urlencode({"q": query, "type": "video", "fields": "videoId", "page": "1"})
+    import urllib.request, urllib.parse, json as _json, os as _os
 
-    def _fetch():
+    def _fetch() -> Optional[str]:
+        # ── Method 1: YouTube Data API v3 ──────────────────────────────────────
+        api_key = _os.environ.get("YOUTUBE_API_KEY", "")
+        if api_key:
+            try:
+                params = urllib.parse.urlencode({
+                    "part": "snippet",
+                    "q": query,
+                    "type": "video",
+                    "maxResults": "1",
+                    "key": api_key,
+                })
+                req = urllib.request.Request(
+                    f"https://www.googleapis.com/youtube/v3/search?{params}",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = _json.loads(resp.read())
+                    items = data.get("items", [])
+                    if items:
+                        vid_id = items[0].get("id", {}).get("videoId")
+                        if vid_id:
+                            return f"https://www.youtube.com/watch?v={vid_id}"
+            except Exception:
+                pass  # fall through to Invidious
+
+        # ── Method 2: Invidious public instances ───────────────────────────────
+        INSTANCES = [
+            "https://inv.nadeko.net",
+            "https://invidious.io.lol",
+            "https://invidious.privacyredirect.com",
+            "https://iv.datura.network",
+            "https://i.nvidious.eu.org",
+            "https://invidious.perennialte.ch",
+        ]
+        params = urllib.parse.urlencode({"q": query, "type": "video", "page": "1"})
         for base in INSTANCES:
             try:
                 req = urllib.request.Request(
