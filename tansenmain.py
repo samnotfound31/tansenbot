@@ -447,7 +447,9 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
         "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
         "quiet": True,
         "no_warnings": True,
-        "ignoreerrors": True,
+        # NOTE: do NOT set ignoreerrors=True here — it makes yt-dlp silently return
+        # None on failure, hiding errors and making all extractions look like timeouts.
+        # Exceptions are caught in the _extract() try/except below instead.
         "default_search": "ytsearch",
         "extract_flat": False,
         "skip_download": True,
@@ -457,15 +459,13 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # Use cloud-friendly clients (same as global YDL_OPTS)
+        # Use cloud-friendly clients
         "extractor_args": {
             "youtube": {
                 "player_client": ["tv_embedded", "mweb", "web"],
                 "skip": ["dash", "hls"],
             }
         },
-        # Use Node.js for JS evaluation (YouTube bot-detection bypass via EJS)
-        "js_runtimes": "node",
     }
     # Inject YouTube cookies if available (critical for cloud/datacenter IPs)
     if YOUTUBE_COOKIES_FILE:
