@@ -446,30 +446,18 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
         "format": "bestaudio/best",
         "quiet": True,
         "no_warnings": True,
-        # NOTE: do NOT set ignoreerrors=True here — it makes yt-dlp silently return
-        # None on failure, hiding errors and making all extractions look like timeouts.
-        # Exceptions are caught in the _extract() try/except below instead.
+        # NOTE: do NOT set ignoreerrors=True — it silently returns None and hides errors.
         "default_search": "ytsearch",
         "extract_flat": False,
         "skip_download": True,
         "noprogress": True,
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # Use Node.js + EJS solver to decrypt YouTube JS challenges.
-        # Must use "tv" player client — EJS is needed for the tv client which works
-        # on cloud IPs. remote_components MUST be a set (not string) or yt-dlp
-        # iterates chars: {"ejs:github"} not "ejs:github".
-        "js_runtimes": {"node": {}},
-        "remote_components": {"ejs:github"},
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["tv"],
-            }
-        },
+        # No player_client override — yt-dlp auto-selects ANDROID_VR which works for
+        # most mainstream videos on cloud IPs without cookies.
     }
-    # Inject YouTube cookies if available (critical for cloud/datacenter IPs)
     if YOUTUBE_COOKIES_FILE:
         YDL_OPTS_LOCAL["cookiefile"] = YOUTUBE_COOKIES_FILE
 
