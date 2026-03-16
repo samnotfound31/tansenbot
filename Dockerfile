@@ -15,10 +15,12 @@ LABEL description="Tansen Discord Music Bot with FFmpeg and yt-dlp"
 # ffmpeg  : audio streaming     (replaces the Windows C:\ffmpeg path)
 # curl    : health checks
 # gcc     : needed by some pip packages on slim images
+# nodejs  : required by yt-dlp for JavaScript evaluation (YouTube bot-detection bypass)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     gcc \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Working directory ─────────────────────────────────────────────────────────
