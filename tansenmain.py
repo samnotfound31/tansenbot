@@ -68,17 +68,42 @@ logger = logging.getLogger("tansen")
 
 # yt-dlp & ffmpeg settings
 YDL_OPTS = {
-    "format": "bestaudio[ext=m4a]/bestaudio/best",
+    "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
     "noplaylist": True,
     "quiet": True,
     "skip_download": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
     "ignoreerrors": True,
-    # sometimes helpful:
     "prefer_ffmpeg": True,
     "geo_bypass": True,
+    # Use TV/mweb clients — these produce stream URLs that work on cloud/datacenter IPs
+    # where the default android/web clients get 403'd by YouTube's anti-bot.
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["tv_embedded", "mweb", "web"],
+            "skip": ["dash", "hls"],  # prefer direct http streams; less likely to 403
+        }
+    },
 }
+
+# Optional: load YouTube cookies from env var (base64-encoded cookies.txt)
+# Set YOUTUBE_COOKIES_B64 on Railway with the output of:
+#   base64 -w0 cookies.txt
+import base64 as _b64, tempfile as _tmp, os as _os
+_yt_cookies_b64 = _os.environ.get("YOUTUBE_COOKIES_B64", "")
+YOUTUBE_COOKIES_FILE: Optional[str] = None
+if _yt_cookies_b64:
+    try:
+        _cookie_bytes = _b64.b64decode(_yt_cookies_b64)
+        _cookie_file = _tmp.NamedTemporaryFile(delete=False, suffix=".txt", mode="wb")
+        _cookie_file.write(_cookie_bytes)
+        _cookie_file.close()
+        YOUTUBE_COOKIES_FILE = _cookie_file.name
+        YDL_OPTS["cookiefile"] = YOUTUBE_COOKIES_FILE
+    except Exception:
+        pass
+
 
 FFMPEG_BEFORE = (
     "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10"
