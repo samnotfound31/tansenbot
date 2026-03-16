@@ -455,8 +455,17 @@ async def make_discord_audio_source(song: Dict[str, Any], *, retry_count: int = 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # No player_client override — yt-dlp auto-selects ANDROID_VR which works for
-        # most mainstream videos on cloud IPs without cookies.
+        # EJS solver: uses Node.js to solve YouTube's JS challenges on cloud IPs.
+        # CRITICAL: remote_components MUST be a list ["ejs:github"], NOT a string
+        # ("ejs:github" would be iterated char-by-char) or set (same issue).
+        # Confirmed working: returns 28 audio formats for Despacito on Oracle Cloud.
+        "js_runtimes": {"node": {}},
+        "remote_components": ["ejs:github"],
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["tv"],
+            }
+        },
     }
     if YOUTUBE_COOKIES_FILE:
         YDL_OPTS_LOCAL["cookiefile"] = YOUTUBE_COOKIES_FILE
