@@ -17,9 +17,6 @@ python-dotenv>=1.1.0
 # ─── Spotify integration (optional — metadata enhancement) ───────────────────
 spotipy>=2.25.1
 
-# ─── Keep-alive web server (keep_alive.py) ───────────────────────────────────
-Flask>=3.1.0
-
 # ─── Type hint back-ports (Python 3.11 compat) ───────────────────────────────
 typing_extensions>=4.5.0
 

@@ -30,18 +30,8 @@ logger.info("=== TANSEN BOT STARTUP ===")
 logger.info("Using NEW architecture: run.py -> bot/bot.py")
 logger.info("Canonical metadata enforcement: ENABLED")
 
-# Optional keep-alive server
-if os.getenv("KEEP_ALIVE", "false").lower() in ("1", "true", "yes"):
-    try:
-        from keep_alive import start_keep_alive
-        start_keep_alive()
-        logger.info("Started keep-alive web thread.")
-    except Exception:
-        logger.exception("Failed to start keep-alive")
-
-# Create and run bot
+# Create and run the bot
 from bot.bot import create_bot
-
 bot = create_bot()
 
 TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("DCTOKEN")
