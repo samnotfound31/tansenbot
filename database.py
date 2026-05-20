@@ -5,9 +5,8 @@
 # - init_db()
 # - connect / get_conn()
 # - Queue functions: save_queue, load_queue, delete_queue
-# - Playlist functions: save_playlist, load_playlists, delete_playlist
 # - Spotify user token functions: save_spotify_token, get_spotify_token_for_user, delete_spotify_token
-#   (now supports access_token, refresh_token, expires_at)
+#   (for optional Spotify metadata enhancement)
 # - Guild settings: save_guild_settings, load_guild_settings
 # - Generic token KV: save_token/get_token (used to cache app tokens)
 #
@@ -53,16 +52,6 @@ def init_db():
                 guild_id TEXT PRIMARY KEY,
                 queue_json TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
-            )
-            """)
-            # playlists per user
-            c.execute("""
-            CREATE TABLE IF NOT EXISTS user_playlists (
-                user_id TEXT,
-                name TEXT,
-                description TEXT,
-                songs TEXT,
-                PRIMARY KEY (user_id, name)
             )
             """)
             # spotify user tokens for OAuth
@@ -131,6 +120,16 @@ except Exception:
 def save_queue(guild_id: str, queue: list) -> None:
     with DB_LOCK:
         ts = int(time.time())
+        # Debug logging: verify canonical metadata is being saved
+        canonical_count = sum(1 for song in queue if song.get("canonical_title"))
+        if canonical_count > 0:
+            import logging
+            logger = logging.getLogger("tansen.database")
+            logger.info(
+                "[database] Saving queue with %d songs, %d with canonical metadata",
+                len(queue),
+                canonical_count,
+            )
         with connect() as conn:
             c = conn.cursor()
             c.execute("""
@@ -159,42 +158,7 @@ def delete_queue(guild_id: str) -> None:
             c.execute("DELETE FROM queues WHERE guild_id = ?", (str(guild_id),))
             conn.commit()
 
-# --- Playlist functions ---
-def save_playlist(user_id: str, playlist_name: str, description: str, songs: list) -> None:
-    with DB_LOCK:
-        with connect() as conn:
-            c = conn.cursor()
-            c.execute("""
-                INSERT INTO user_playlists (user_id, name, description, songs)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(user_id, name) DO UPDATE SET description=excluded.description, songs=excluded.songs
-            """, (str(user_id), playlist_name, description, json.dumps(songs)))
-            conn.commit()
-
-def load_playlists(user_id: str) -> Dict[str, Any]:
-    with connect() as conn:
-        c = conn.cursor()
-        c.execute("SELECT name, description, songs FROM user_playlists WHERE user_id = ?", (str(user_id),))
-        out = {}
-        rows = c.fetchall()
-        for row in rows:
-            name = row["name"]
-            desc = row["description"]
-            songs = row["songs"]
-            try:
-                out[name] = {"description": desc, "songs": json.loads(songs)}
-            except Exception:
-                out[name] = {"description": desc, "songs": []}
-        return out
-
-def delete_playlist(user_id: str, playlist_name: str) -> None:
-    with DB_LOCK:
-        with connect() as conn:
-            c = conn.cursor()
-            c.execute("DELETE FROM user_playlists WHERE user_id = ? AND name = ?", (str(user_id), playlist_name))
-            conn.commit()
-
-# --- Spotify user token functions ---
+# --- Spotify user token functions (for optional Spotify metadata enhancement) ---
 def save_spotify_token(user_id: str, access_token: str, refresh_token: Optional[str] = None, expires_at: Optional[int] = None) -> None:
     """
     Upsert the user's Spotify token info.

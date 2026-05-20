@@ -20,38 +20,24 @@ Thumbs.db
 
 # ─── Secrets — NEVER commit these ────────────────────────────────────────────
 .env
-*.env
-.env.*
-# Allow the example template (no real secrets inside)
-!.env.example
+.env.local
+.env.*.local
 secrets.json
 tokens.py
 secrets.py
 *.key
 *.pem
 cookies.txt
-*.cookie
 
-# ─── Database & local data ────────────────────────────────────────────────────
-data/
+# ─── Database files ─────────────────────────────────────────────────────────────
 *.db
+*.sqlite
 *.sqlite3
-music_queue.json
-playlists.json
 
-# ─── Downloaded audio files ───────────────────────────────────────────────────
-downloads/
-downloads/*
-
-# ─── Logs & cache ─────────────────────────────────────────────────────────────
+# ─── Logs ───────────────────────────────────────────────────────────────────────
+logs/
 *.log
-.cache
 
-# ─── Build / distribution ─────────────────────────────────────────────────────
-dist/
-build/
-*.egg-info/
-
-# ─── Legacy files (no longer used) ───────────────────────────────────────────
-tansen.py
-railway.toml
+# ─── Lavalink ───────────────────────────────────────────────────────────────────
+lavalink/plugins/
+Lavalink.jar

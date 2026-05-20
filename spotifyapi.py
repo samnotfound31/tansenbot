@@ -182,12 +182,28 @@ async def exchange_code_for_token_async(code: str, state: Optional[str] = None) 
 # ---------- App token (client credentials) ----------
 def _fetch_app_token_from_spotify() -> Optional[Dict[str, Any]]:
     if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+        import logging
+        logger = logging.getLogger("tansen.spotifyapi")
+        logger.error(
+            "[spotifyapi] MISSING Spotify credentials: SPOTIFY_CLIENT_ID=%s, SPOTIFY_CLIENT_SECRET=%s",
+            bool(SPOTIFY_CLIENT_ID),
+            bool(SPOTIFY_CLIENT_SECRET),
+        )
         return None
     url = "https://accounts.spotify.com/api/token"
     auth = f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}"
     headers = {"Authorization": f"Basic {base64.b64encode(auth.encode()).decode()}", "Content-Type": "application/x-www-form-urlencoded"}
     data = {"grant_type": "client_credentials"}
-    return _post(url, data, headers=headers)
+    result = _post(url, data, headers=headers)
+
+    import logging
+    logger = logging.getLogger("tansen.spotifyapi")
+    if result:
+        logger.info("[spotifyapi] Successfully fetched Spotify app token")
+    else:
+        logger.error("[spotifyapi] Failed to fetch Spotify app token")
+
+    return result
 
 def get_app_spotify_token() -> Optional[str]:
     raw = get_token(APP_TOKEN_KEY)

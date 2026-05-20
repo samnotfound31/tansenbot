@@ -1,1 +1,1 @@
-worker: python tansenmain.py
+worker: python run.py

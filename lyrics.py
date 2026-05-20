@@ -17,12 +17,15 @@ import os
 import re
 import time
 import asyncio
+import logging
 from typing import Optional, Dict, Any, List
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 GENIUS_TOKEN = os.getenv("GENIUS_API_TOKEN")
+
+logger = logging.getLogger("tansen.lyrics")
 
 # simple in-memory cache: key -> (value, expiry_ts)
 _CACHE: Dict[str, Any] = {}
@@ -57,6 +60,44 @@ def clean_song_title(title: str) -> str:
     return s
 
 
+def aggressive_clean_for_lyrics(title: str) -> str:
+    """
+    Aggressively clean SoundCloud playback metadata for lyrics lookup.
+
+    Removes:
+    - Version modifiers: slowed, reverb, sped up, remix, edit, phonk, nightcore
+    - Quality tags: bass boosted, 8d audio, lofi
+    - Upload noise: repost, upload, official, lyrics, audio, video
+    - Emojis and special characters
+
+    Used as fallback when canonical Spotify metadata is unavailable.
+    """
+    if not title:
+        return title
+    s = str(title).lower()
+
+    # Remove version modifiers
+    s = re.sub(r"\b(slowed|reverb|sped\s*up|remix|edit|phonk|nightcore|acoustic|live|instrumental)\b", "", s)
+
+    # Remove quality tags
+    s = re.sub(r"\b(bass\s*boosted|8d\s*audio|lofi|lo-fi)\b", "", s)
+
+    # Remove upload noise
+    s = re.sub(r"\b(repost|upload|official|lyrics|audio|video|mv|hd|4k)\b", "", s)
+
+    # Remove content in brackets/parentheses
+    s = re.sub(r"\[.*?\]", "", s)
+    s = re.sub(r"\(.*?\)", "", s)
+
+    # Remove emojis and special chars
+    s = re.sub(r"[^\w\s\-]", "", s)
+
+    # Clean up whitespace
+    s = re.sub(r"\s+", " ", s).strip()
+
+    return s
+
+
 def _cache_get(key: str) -> Optional[str]:
     entry = _CACHE.get(key)
     if not entry:
@@ -86,7 +127,7 @@ def _looks_like_non_song(url: str, title: str) -> bool:
 
 # ------------------------ OVH (fast) ------------------------
 
-async def get_lyrics_from_ovh(artist: str, title: str) -> Optional[str]:
+async def get_lyrics_from_ovh(artist: str, title: str, *, is_canonical: bool = False) -> Optional[str]:
     """
     Fetch lyrics from lyrics.ovh (fast). Returns lyrics string or None.
     """
@@ -98,6 +139,7 @@ async def get_lyrics_from_ovh(artist: str, title: str) -> Optional[str]:
     cache_key = f"ovh:{artist}:{title}"
     cached = _cache_get(cache_key)
     if cached:
+        logger.debug("[lyrics] OVH cache hit for '%s - %s'", artist, title)
         return cached
 
     url = f"https://api.lyrics.ovh/v1/{artist}/{title}"
@@ -106,13 +148,19 @@ async def get_lyrics_from_ovh(artist: str, title: str) -> Optional[str]:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=8) as resp:
                     if resp.status != 200:
+                        logger.debug("[lyrics] OVH returned %d for '%s - %s'", resp.status, artist, title)
                         return None
                     data = await resp.json()
                     lyrics = data.get("lyrics")
                     if lyrics and lyrics.strip():
                         _cache_set(cache_key, lyrics.strip())
+                        logger.info(
+                            "[lyrics] OVH success: artist='%s', title='%s', is_canonical=%s",
+                            artist, title, is_canonical
+                        )
                         return lyrics.strip()
     except Exception:
+        logger.exception("[lyrics] OVH fetch failed for '%s - %s'", artist, title)
         return None
     return None
 
@@ -124,6 +172,7 @@ async def _genius_search_hits(query: str) -> List[Dict[str, Any]]:
     Search Genius API and return hits (list). Empty list on failure or if token missing.
     """
     if not GENIUS_TOKEN or not query:
+        logger.debug("[lyrics] Genius search skipped: no token or empty query")
         return []
     url = "https://api.genius.com/search"
     headers = {"Authorization": f"Bearer {GENIUS_TOKEN}"}
@@ -132,10 +181,14 @@ async def _genius_search_hits(query: str) -> List[Dict[str, Any]]:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, params={"q": query}, headers=headers, timeout=10) as resp:
                     if resp.status != 200:
+                        logger.debug("[lyrics] Genius search returned %d for query='%s'", resp.status, query)
                         return []
                     data = await resp.json()
-                    return data.get("response", {}).get("hits", []) or []
+                    hits = data.get("response", {}).get("hits", []) or []
+                    logger.debug("[lyrics] Genius search returned %d hits for query='%s'", len(hits), query)
+                    return hits
     except Exception:
+        logger.exception("[lyrics] Genius search failed for query='%s'", query)
         return []
 
 
@@ -361,40 +414,57 @@ async def get_lyrics_from_genius(query: str) -> Optional[str]:
 
 # ------------------------ public helper ------------------------
 
-async def get_best_lyrics(artist: str, title: str) -> Optional[str]:
+async def get_best_lyrics(artist: str, title: str, *, is_canonical: bool = False) -> Optional[str]:
     """
     Public helper: try OVH first (fast), then Genius fallback.
     artist and title should be plain strings (artist may be empty).
+
+    If is_canonical=False (no Spotify metadata available), applies aggressive
+    cleaning to remove SoundCloud noise (slowed, reverb, remix, etc.).
     """
     artist = (artist or "").strip()
     title = (title or "").strip()
-    title_clean = clean_song_title(title)
 
-    cache_key = f"best:{artist}:{title_clean}"
+    # If not canonical metadata, clean aggressively to remove SoundCloud noise
+    if not is_canonical:
+        title = aggressive_clean_for_lyrics(title)
+        title = clean_song_title(title)
+    else:
+        title = clean_song_title(title)
+
+    cache_key = f"best:{artist}:{title}"
     async with _CACHE_LOCK:
         cached = _cache_get(cache_key)
     if cached:
+        logger.debug("[lyrics] Cache hit for '%s - %s'", artist, title)
         return cached
+
+    logger.info(
+        "[lyrics] Lookup: artist='%s', title='%s', is_canonical=%s",
+        artist, title, is_canonical
+    )
 
     # OVH first
     try:
-        ovh = await get_lyrics_from_ovh(artist, title_clean)
+        ovh = await get_lyrics_from_ovh(artist, title, is_canonical=is_canonical)
         if ovh:
             _cache_set(cache_key, ovh)
             return ovh
     except Exception:
-        pass
+        logger.exception("[lyrics] OVH lookup failed for '%s - %s'", artist, title)
 
     # Genius fallback
-    q = f"{artist} {title_clean}".strip()
+    q = f"{artist} {title}".strip()
     try:
         gen = await get_lyrics_from_genius(q)
         if gen:
             _cache_set(cache_key, gen)
+            logger.info("[lyrics] Genius fallback success for '%s - %s'", artist, title)
             return gen
     except Exception:
-        pass
+        logger.exception("[lyrics] Genius lookup failed for '%s - %s'", artist, title)
 
+    logger.warning("[lyrics] No lyrics found for '%s - %s'", artist, title)
     return None
 
 

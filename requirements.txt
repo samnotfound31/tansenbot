@@ -1,13 +1,12 @@
-# ─── Core Discord library (app_commands requires discord.py 2.x) ────────────
-discord.py[voice]>=2.7.1
+# ─── Core Discord library (discord.py 2.x) ──────────────────────────────────
+discord.py>=2.7.1
+
+# ─── Lavalink client (Wavelink 3.x) ─────────────────────────────────────────
+wavelink>=3.4.0
 
 # ─── HTTP ───────────────────────────────────────────────────────────────────
 aiohttp>=3.8.1
 requests>=2.32.3
-
-# ─── YouTube audio streaming ─────────────────────────────────────────────────
-# Keep yt-dlp up to date — YouTube anti-bot measures change frequently.
-yt-dlp>=2026.3.13
 
 # ─── Lyrics scraping ─────────────────────────────────────────────────────────
 beautifulsoup4>=4.12.2
@@ -15,7 +14,7 @@ beautifulsoup4>=4.12.2
 # ─── Environment / config ────────────────────────────────────────────────────
 python-dotenv>=1.1.0
 
-# ─── Spotify integration ─────────────────────────────────────────────────────
+# ─── Spotify integration (optional — metadata enhancement) ───────────────────
 spotipy>=2.25.1
 
 # ─── Keep-alive web server (keep_alive.py) ───────────────────────────────────
@@ -24,8 +23,6 @@ Flask>=3.1.0
 # ─── Type hint back-ports (Python 3.11 compat) ───────────────────────────────
 typing_extensions>=4.5.0
 
-# ─── NOTE: ffmpeg is a SYSTEM dependency — not installed via pip. ─────────────
-# Install it separately:
-#   Windows : download from https://ffmpeg.org/download.html and add to PATH
-#   Linux   : sudo apt install ffmpeg
-#   Railway : add a Nixpacks ffmpeg buildpack or use nixpacks.toml
+# ─── NOTE: No more ffmpeg or yt-dlp needed. ─────────────────────────────────
+# Audio streaming is handled entirely by Lavalink (runs as a separate service).
+# See docker-compose.yml for the Lavalink container setup.

@@ -3,8 +3,8 @@
 
 # Secrets — NEVER include these in the Docker image
 .env
-*.env
-.env.*
+.env.local
+.env.*.local
 secrets.json
 tokens.py
 secrets.py
@@ -12,11 +12,13 @@ secrets.py
 *.pem
 cookies.txt
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
 # Local data (mounted as volumes at runtime instead)
 data/
-*.db
-*.sqlite3
-downloads/
 
 # Git history (not needed in container)
 .git/
@@ -27,6 +29,12 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
+env/
+venv/
+venv.bak/
+ENV/
+.Python
 
 # Dev tools
 .vscode/
@@ -35,7 +43,12 @@ __pycache__/
 Thumbs.db
 
 # Logs
+logs/
 *.log
 
 # Cache
 .cache/
+
+# Lavalink
+lavalink/plugins/
+Lavalink.jar
